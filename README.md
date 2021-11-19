@@ -7,7 +7,8 @@ See their paper for more details <https://archives.ismir.net/ismir2019/paper/000
 
 ## Dataset
 <https://github.com/marl/GuitarSet>
-Use the *audio_mono-mic* subset which uses monophonic recording from reference microphone
+
+Make sure to use the *audio_mono-mic* subset which uses monophonic recording from reference microphone
 
 ## Resources
 Here are some related tasks for reference
