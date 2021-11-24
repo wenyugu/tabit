@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 
-DATA_PATH = '../spec_repr/'
+DATA_PATH = os.path.abspath(os.path.dirname(__file__)) + '/spec_repr/'
 
 class GuitarSetDataset(Dataset):
     def __init__(self, partition_ids, data_dir=DATA_PATH, context_win_size=9, spec_mode='c'):
@@ -29,7 +29,9 @@ class GuitarSetDataset(Dataset):
         loaded = np.load(path + filename)
         full_x = np.pad(loaded["repr"], [(self.halfwin, self.halfwin), (0,0)], mode='constant')
         sample_x = full_x[frame_idx:frame_idx + self.context_win_size]
-        return np.swapaxes(sample_x, 0, 1), loaded["labels"][frame_idx]
+        X = torch.from_numpy(np.swapaxes(sample_x, 0, 1)[None, :]).float()
+        y = torch.from_numpy(loaded["labels"][frame_idx]).float()
+        return X, y
 
 if __name__ == '__main__':
     partition_csv = './id.csv'

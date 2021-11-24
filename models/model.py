@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
 
 class Net(nn.Module):
     def __init__(self):
@@ -28,5 +27,13 @@ class Net(nn.Module):
 
 if __name__ == '__main__':
     model = Net()
-    x = torch.rand(1, 1, 192, 9)
-    print(model(x))
+    x = torch.rand(4, 1, 192, 9)
+    y = torch.max(torch.rand(4, 6, 21), 2)[1]
+    out = torch.reshape(model(x), (4, 6, 21))
+    loss = nn.CrossEntropyLoss()
+    z = -F.log_softmax(out, 2)
+    print(z[0])
+    print(y.unsqueeze(2)[0])
+    z = z.gather(2, y.unsqueeze(2))
+    print(z.sum(1))
+    print(torch.sum(z, 1).mean())
