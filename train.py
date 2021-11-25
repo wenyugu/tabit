@@ -133,9 +133,8 @@ def main():
             # sys.stdout.flush()
 
         # testing
-        precisons = []
-        recalls = []
-        fscores = []
+        precision = 0
+        recall = 0
         model.eval()
         with torch.no_grad():
             for i, (inputs, labels) in tqdm(enumerate(test_loader)) if args.verbose else enumerate(test_loader):
@@ -149,16 +148,12 @@ def main():
                 total_pred = torch.sum(tab_pred)
                 true_pred = torch.sum(tab_gt)
                 # precision recall f-score
-                precision = tp / total_pred
-                recall = tp / true_pred
-                fscore = f_score(precision, recall)
-                precisons.append(precision)
-                recalls.append(recall)
-                fscores.append(fscore)
+                precision += tp / total_pred
+                recall += tp / true_pred
 
-        avg_fscore = sum(fscores) / len(test_dataset)
-        avg_precision = sum(precisons) / len(test_dataset)
-        avg_recall = sum(recalls) / len(test_dataset)
+        avg_precision = precision/ len(test_loader)
+        avg_recall = recall / len(test_loader)
+        avg_fscore = f_score(avg_precision, avg_recall)
         print('[Fold {}] Precision: {:5f} Recall: {:5f} F-score: {:5f}'.format(k, avg_precision, avg_recall, avg_fscore))
         if avg_fscore > best_fscore:
             best_fscore = avg_fscore
