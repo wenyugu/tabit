@@ -57,6 +57,22 @@ def main():
     display_config(args)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+    config = {'feature_size': 192,
+              'timestep': 216,
+              'num_chords': 126,
+              'input_dropout': 0.2,
+              'layer_dropout': 0.2,
+              'attention_dropout': 0.2,
+              'relu_dropout': 0.2,
+              'num_layers': 8,
+              'num_heads': 4,
+              'hidden_size': 128,
+              'total_key_depth': 128,
+              'total_value_depth': 128,
+              'filter_size': 128,
+              'loss': 'ce',
+              'probs_out': False}
+
     def criterion(output, target):
         y = torch.max(target, 2)[1]
         z = -F.log_softmax(output, 2)
@@ -67,7 +83,10 @@ def main():
     best_fscore = 0
 
     for k in range(6):
-        model = Net()
+        if args.model == 'cnn':
+            model = Net().to(device)
+        elif args.model == 'btc':
+            model = BTC_model(config=config).to(device)
         # model = model.cuda()
         # if len(gpu_devices) > 1:
         #     model = torch.nn.DataParallel(model)
@@ -84,14 +103,14 @@ def main():
             else:
                 train_partition.append(item)
 
-        train_dataset = GuitarSetDataset(train_partition)
+        train_dataset = GuitarSetDataset(train_partition, context_win_size=config['timestep'], seq2seq=True)
         train_loader = DataLoader(dataset=train_dataset,
                                 batch_size=args.batchsize,
                                 shuffle=True,
                                 pin_memory=torch.cuda.is_available(),
                                 num_workers=args.num_workers)
 
-        test_dataset = GuitarSetDataset(test_partition)
+        test_dataset = GuitarSetDataset(test_partition, context_win_size=config['timestep'], seq2seq=True)
         test_loader = DataLoader(dataset=test_dataset,
                                 batch_size=args.batchsize,
                                 shuffle=False,
@@ -114,6 +133,8 @@ def main():
                 with torch.set_grad_enabled(True):
 
                     outputs = torch.reshape(model(inputs), (-1, 6, 21))
+                    if args.model == 'btc':
+                        labels = torch.reshape(labels, (-1, 6, 21))
                     loss = criterion(outputs, labels)
 
                     loss.backward()
@@ -140,6 +161,8 @@ def main():
             for i, (inputs, labels) in tqdm(enumerate(test_loader)) if args.verbose else enumerate(test_loader):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
+                if args.model == 'btc':
+                    labels = torch.reshape(labels, (-1, 6, 21))
                 outputs = torch.reshape(model(inputs), (-1, 6, 21))
 
                 tab_pred = F.one_hot(torch.max(F.softmax(outputs, 2), 2)[1], num_classes=21)[:, :, 1:]
