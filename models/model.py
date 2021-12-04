@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from layers import *
-from layers import _gen_bias_mask, _gen_timing_signal
+from models.layers import *
+from models.layers import _gen_bias_mask, _gen_timing_signal
 
 class Net(nn.Module):
     def __init__(self):
