@@ -114,7 +114,7 @@ class TabDataReprGen:
                 n_bins=self.cqt_n_bins, 
                 bins_per_octave=self.cqt_bins_per_octave))
         elif self.preproc_mode == "m":
-            data = librosa.feature.melspectrogram(y=data, sr=self.sr_curr, n_fft=self.n_fft, hop_length=self.hop_length)
+            data = librosa.power_to_db(librosa.feature.melspectrogram(y=data, sr=self.sr_curr, n_fft=self.n_fft, hop_length=self.hop_length), ref=np.max)
         elif self.preproc_mode == "cm":
             cqt = np.abs(librosa.cqt(data, 
                 hop_length=self.hop_length, 

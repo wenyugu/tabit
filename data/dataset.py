@@ -20,7 +20,7 @@ class GuitarSetDataset(Dataset):
             for partition_id in sorted(partition_ids):
                 frame_idx = int(partition_id.split("_")[-1])
                 filename = "_".join(partition_id.split("_")[:-1]) + ".npz"
-                if frame_idx % context_win_size == 0:
+                if frame_idx % self.halfwin == 0:
                     self.seqs.append((filename, frame_idx))
 
 

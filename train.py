@@ -11,6 +11,46 @@ from models.metric import *
 import sys
 import os
 
+class StatsRecorder:
+    def __init__(self, red_dims=(0,2,3)):
+        """Accumulates normalization statistics across mini-batches.
+        ref: http://notmatthancock.github.io/2017/03/23/simple-batch-stat-updates.html
+        """
+        self.red_dims = red_dims # which mini-batch dimensions to average over
+        self.nobservations = 0   # running number of observations
+
+    def update(self, data):
+        """
+        data: ndarray, shape (nobservations, ndimensions)
+        """
+        # initialize stats and dimensions on first batch
+        if self.nobservations == 0:
+            self.mean = data.mean(dim=self.red_dims, keepdim=True)
+            self.std  = data.std(dim=self.red_dims,keepdim=True)
+            self.nobservations = data.shape[0]
+            self.ndimensions   = data.shape[1]
+        else:
+            if data.shape[1] != self.ndimensions:
+                raise ValueError('Data dims do not match previous observations.')
+            
+            # find mean of new mini batch
+            newmean = data.mean(dim=self.red_dims, keepdim=True)
+            newstd  = data.std(dim=self.red_dims, keepdim=True)
+            
+            # update number of observations
+            m = self.nobservations * 1.0
+            n = data.shape[0]
+
+            # update running statistics
+            tmp = self.mean
+            self.mean = m/(m+n)*tmp + n/(m+n)*newmean
+            self.std  = m/(m+n)*self.std**2 + n/(m+n)*newstd**2 +\
+                        m*n/(m+n)**2 * (tmp - newmean)**2
+            self.std  = torch.sqrt(self.std)
+                                 
+            # update total number of seen samples
+            self.nobservations += n
+
 def display_config(args):
     print('-------SETTINGS_________')
     for arg in vars(args):
@@ -156,6 +196,8 @@ def main():
         # testing
         precision = 0
         recall = 0
+        correct = torch.zeros(6)
+        total = 0
         model.eval()
         with torch.no_grad():
             for i, (inputs, labels) in tqdm(enumerate(test_loader)) if args.verbose else enumerate(test_loader):
@@ -164,8 +206,10 @@ def main():
                 if args.model == 'btc':
                     labels = torch.reshape(labels, (-1, 6, 21))
                 outputs = torch.reshape(model(inputs), (-1, 6, 21))
-
-                tab_pred = F.one_hot(torch.max(F.softmax(outputs, 2), 2)[1], num_classes=21)[:, :, 1:]
+                total_pred = F.one_hot(torch.max(F.softmax(outputs, 2), 2)[1], num_classes=21)
+                total += labels.size(0)
+                correct += torch.sum(torch.sum(labels * total_pred, 2), 0)
+                tab_pred = total_pred[:, :, 1:]
                 tab_gt = labels[:, :, 1:]
                 tp = torch.sum(tab_pred * tab_gt)
                 total_pred = torch.sum(tab_pred)
@@ -178,6 +222,8 @@ def main():
         avg_recall = recall / len(test_loader)
         avg_fscore = f_score(avg_precision, avg_recall)
         print('[Fold {}] Precision: {:5f} Recall: {:5f} F-score: {:5f}'.format(k, avg_precision, avg_recall, avg_fscore))
+        for i in range(6):
+            print('String {} accuracy: {:3f}'.format(i+1, correct[i] / total))
         if avg_fscore > best_fscore:
             best_fscore = avg_fscore
             torch.save(model.state_dict(), os.path.join(os.path.join(args.save_model_path, args.log_name), 'best_cnn.pth'))
