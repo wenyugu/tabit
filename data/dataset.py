@@ -77,7 +77,7 @@ if __name__ == '__main__':
         else:
             train_partition.append(item)
 
-    train_dataset = GuitarSetDataset(train_partition, context_win_size=216, seq2seq=True)
+    train_dataset = GuitarSetDataset(train_partition)
     train_loader = DataLoader(dataset=train_dataset,
                               batch_size=64,
                               shuffle=True)
@@ -89,7 +89,7 @@ if __name__ == '__main__':
         print(inputs.shape, labels.shape)
         break
 
-    test_dataset = GuitarSetDataset(test_partition, context_win_size=216, seq2seq=True)
+    test_dataset = GuitarSetDataset(test_partition)
     test_loader = DataLoader(dataset=test_dataset,
                              batch_size=64,
                              shuffle=False)
