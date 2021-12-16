@@ -50,7 +50,7 @@ class myLSTM(nn.Module):
         return x
 
 class CNN_LSTM(nn.Module):
-    def __init__(self, input_size=192, hidden_size=256, num_layers=1, bidirectional=False, seq2seq=False):
+    def __init__(self, input_size=192, hidden_size=256, num_layers=1, dropout=0, bidirectional=False, seq2seq=False):
         super().__init__()
         self.seq2seq = seq2seq
         self.input_size = input_size
@@ -76,7 +76,7 @@ class CNN_LSTM(nn.Module):
             self.fc1 = nn.Linear(1536, 512)
             self.fc1s = nn.Linear(28416, 512)
         self.fc2 = nn.Linear(512, 126)
-        self.lstm = nn.LSTM(self.input_size, self.hidden_size, self.num_layers, batch_first=True, bidirectional=self.bidirectional)
+        self.lstm = nn.LSTM(self.input_size, self.hidden_size, self.num_layers, batch_first=True, dropout=dropout, bidirectional=self.bidirectional)
 
     def forward(self, x):
         if not self.seq2seq:
@@ -108,7 +108,7 @@ class CNN_LSTM(nn.Module):
         return x
 
 class Resnet_LSTM(nn.Module):
-    def __init__(self, input_size=192, hidden_size=256, num_layers=1, bidirectional=False):
+    def __init__(self, input_size=192, hidden_size=256, num_layers=1, dropout=0, bidirectional=False):
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
@@ -123,7 +123,7 @@ class Resnet_LSTM(nn.Module):
         if self.bidirectional:
             self.fc1 = nn.Linear(1536, 512)
         self.fc2 = nn.Linear(512, 126)
-        self.lstm = nn.LSTM(self.input_size, self.hidden_size, self.num_layers, batch_first=True, bidirectional=self.bidirectional)
+        self.lstm = nn.LSTM(self.input_size, self.hidden_size, self.num_layers, batch_first=True, dropout=dropout, bidirectional=self.bidirectional)
 
     def forward(self, x):
         bs, seqlen, num_features = x.size()
@@ -137,35 +137,23 @@ class Resnet_LSTM(nn.Module):
         return x
 
 if __name__ == '__main__':
-    model = myLSTM(num_layers=2, bidirectional=True)
+    model = Net()
     x = torch.rand(4, 1, 192, 9)
-    y = torch.max(torch.rand(4, 6, 21), 2)[1]
-    output = model(x)
-    print(output.size())
-    out = torch.reshape(output, (4, 6, 21))
-    z = -F.log_softmax(out, 2)
-    print(z[0])
-    print(y.unsqueeze(2)[0])
-    z = z.gather(2, y.unsqueeze(2))
-    print(z.shape)
-    print(z.sum(1))
-    print(torch.sum(z, 1).mean())
+    out = model(x)
+    # model = myLSTM(num_layers=2, bidirectional=True)
+    # x = torch.rand(4, 1, 192, 9)
+    # y = torch.max(torch.rand(4, 6, 21), 2)[1]
+    # output = model(x)
+    # print(output.size())
+    # out = torch.reshape(output, (4, 6, 21))
+    # z = -F.log_softmax(out, 2)
+    # print(z[0])
+    # print(y.unsqueeze(2)[0])
+    # z = z.gather(2, y.unsqueeze(2))
+    # print(z.shape)
+    # print(z.sum(1))
+    # print(torch.sum(z, 1).mean())
     # take 5 sec 
-    # config = {  'feature_size' : 192,
-    #             'timestep' : 216,
-    #             'num_chords' : 126,
-    #             'input_dropout' : 0.2,
-    #             'layer_dropout' : 0.2,
-    #             'attention_dropout' : 0.2,
-    #             'relu_dropout' : 0.2,
-    #             'num_layers' : 8,
-    #             'num_heads' : 4,
-    #             'hidden_size' : 128,
-    #             'total_key_depth' : 128,
-    #             'total_value_depth' : 128,
-    #             'filter_size' : 128,
-    #             'loss' : 'ce',
-    #             'probs_out' : False}
     # model = CNN_LSTM(bidirectional=True)
     # x = torch.rand(2, 216, 192)
     # y = torch.max(torch.rand(2 * 216, 6, 21), 2)[1]

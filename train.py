@@ -11,46 +11,6 @@ from models.metric import *
 import sys
 import os
 
-class StatsRecorder:
-    def __init__(self, red_dims=(0,2,3)):
-        """Accumulates normalization statistics across mini-batches.
-        ref: http://notmatthancock.github.io/2017/03/23/simple-batch-stat-updates.html
-        """
-        self.red_dims = red_dims # which mini-batch dimensions to average over
-        self.nobservations = 0   # running number of observations
-
-    def update(self, data):
-        """
-        data: ndarray, shape (nobservations, ndimensions)
-        """
-        # initialize stats and dimensions on first batch
-        if self.nobservations == 0:
-            self.mean = data.mean(dim=self.red_dims, keepdim=True)
-            self.std  = data.std(dim=self.red_dims,keepdim=True)
-            self.nobservations = data.shape[0]
-            self.ndimensions   = data.shape[1]
-        else:
-            if data.shape[1] != self.ndimensions:
-                raise ValueError('Data dims do not match previous observations.')
-            
-            # find mean of new mini batch
-            newmean = data.mean(dim=self.red_dims, keepdim=True)
-            newstd  = data.std(dim=self.red_dims, keepdim=True)
-            
-            # update number of observations
-            m = self.nobservations * 1.0
-            n = data.shape[0]
-
-            # update running statistics
-            tmp = self.mean
-            self.mean = m/(m+n)*tmp + n/(m+n)*newmean
-            self.std  = m/(m+n)*self.std**2 + n/(m+n)*newstd**2 +\
-                        m*n/(m+n)**2 * (tmp - newmean)**2
-            self.std  = torch.sqrt(self.std)
-                                 
-            # update total number of seen samples
-            self.nobservations += n
-
 def display_config(args):
     print('-------SETTINGS_________')
     for arg in vars(args):
@@ -86,9 +46,9 @@ args = parser.parse_args()
 
 def main():
     start_time = time()
-    # gpu_devices = os.environ['CUDA_VISIBLE_DEVICES']
-    # gpu_devices = gpu_devices.split(',')
-    # print("Using GPU", gpu_devices)
+    gpu_devices = os.environ['CUDA_VISIBLE_DEVICES']
+    gpu_devices = gpu_devices.split(',')
+    print("Using GPU", gpu_devices)
 
     if not torch.cuda.is_available():
         print('GPU not available')
@@ -96,22 +56,15 @@ def main():
     # cudnn.benchmark = True
     display_config(args)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    
+    seq2seq = True 
 
     config = {'feature_size': 192,
               'timestep': 216,
-              'num_chords': 126,
-              'input_dropout': 0.2,
-              'layer_dropout': 0.2,
-              'attention_dropout': 0.2,
-              'relu_dropout': 0.2,
-              'num_layers': 8,
-              'num_heads': 4,
-              'hidden_size': 128,
-              'total_key_depth': 128,
-              'total_value_depth': 128,
-              'filter_size': 128,
-              'loss': 'ce',
-              'probs_out': False}
+              'num_layers': 2,
+              'dropout': 0.2,
+              'bidirectional': True
+              }
 
     def criterion(output, target):
         y = torch.max(target, 2)[1]
@@ -120,16 +73,21 @@ def main():
         return torch.sum(z, 1).mean()
 
     partition_csv = args.partition_file
-    best_fscore = 0
+    test_batchsize = 128 
+    best_fscore = 0 
 
     for k in range(6):
         if args.model == 'cnn':
             model = Net().to(device)
-        elif args.model == 'btc':
-            model = BTC_model(config=config).to(device)
-        # model = model.cuda()
-        # if len(gpu_devices) > 1:
-        #     model = torch.nn.DataParallel(model)
+        elif args.model =='cnn-lstm':
+            model = CNN_LSTM(num_layers=config['num_layers'], bidirectional=config['bidirectional']).to(device)
+        elif args.model =='resnet-lstm':
+            model = Resnet_LSTM(num_layers=config['num_layers'], dropout=config['dropout'], bidirectional=config['bidirectional']).to(device)
+        elif args.model == 'lstm':
+            model = myLSTM(num_layers=config['num_layers'], bidirectional=config['bidirectional']).to(device)
+
+        if len(gpu_devices) > 1:
+            model = torch.nn.DataParallel(model)
         
         optimizer = optim.Adam(model.parameters(), lr=args.lr)
         scheduler = lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
@@ -152,7 +110,7 @@ def main():
 
         test_dataset = GuitarSetDataset(test_partition, context_win_size=config['timestep'], seq2seq=True)
         test_loader = DataLoader(dataset=test_dataset,
-                                batch_size=args.batchsize,
+                                batch_size=test_batchsize,
                                 shuffle=False,
                                 pin_memory=torch.cuda.is_available(),
                                 num_workers=args.num_workers)
@@ -173,7 +131,7 @@ def main():
                 with torch.set_grad_enabled(True):
 
                     outputs = torch.reshape(model(inputs), (-1, 6, 21))
-                    if args.model == 'btc':
+                    if seq2seq: 
                         labels = torch.reshape(labels, (-1, 6, 21))
                     loss = criterion(outputs, labels)
 
@@ -183,7 +141,7 @@ def main():
                 # statistics
                 running_loss += loss.item() * inputs.size(0)
 
-            scheduler.step()
+            # scheduler.step()
 
             epoch_loss = running_loss / len(train_dataset)
 
@@ -191,44 +149,42 @@ def main():
 
             if (epoch + 1) % args.save_every == 0:
                 checkpoint(model, epoch)
-            # sys.stdout.flush()
 
         # testing
-        precision = 0
-        recall = 0
+        tp = 0
+        total_pred = 0
+        true_pred = 0
         correct = torch.zeros(6)
         total = 0
+
         model.eval()
         with torch.no_grad():
             for i, (inputs, labels) in tqdm(enumerate(test_loader)) if args.verbose else enumerate(test_loader):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
-                if args.model == 'btc':
+                if seq2seq:
                     labels = torch.reshape(labels, (-1, 6, 21))
                 outputs = torch.reshape(model(inputs), (-1, 6, 21))
-                total_pred = F.one_hot(torch.max(F.softmax(outputs, 2), 2)[1], num_classes=21)
-                total += labels.size(0)
-                correct += torch.sum(torch.sum(labels * total_pred, 2), 0)
-                tab_pred = total_pred[:, :, 1:]
-                tab_gt = labels[:, :, 1:]
-                tp = torch.sum(tab_pred * tab_gt)
-                total_pred = torch.sum(tab_pred)
-                true_pred = torch.sum(tab_gt)
-                # precision recall f-score
-                precision += tp / total_pred
-                recall += tp / true_pred
 
-        avg_precision = precision/ len(test_loader)
-        avg_recall = recall / len(test_loader)
-        avg_fscore = f_score(avg_precision, avg_recall)
-        print('[Fold {}] Precision: {:5f} Recall: {:5f} F-score: {:5f}'.format(k, avg_precision, avg_recall, avg_fscore))
+                total_tabs = F.one_hot(torch.max(F.softmax(outputs, 2), 2)[1], num_classes=21)
+                total += labels.size(0)
+                correct += torch.sum(torch.sum(labels * total_tabs, 2), 0).cpu().detach()
+                tab_pred = total_tabs[:, :, 1:]
+                tab_gt = labels[:, :, 1:]
+                tp += torch.sum(tab_pred * tab_gt)
+                total_pred += torch.sum(tab_pred)
+                true_pred += torch.sum(tab_gt)
+
+        p = tp / total_pred
+        r = tp / true_pred
+        avg_fscore = f_score(p, r) 
+        print('[Fold {}] Precision: {:5f} Recall: {:5f} F-score: {:5f}'.format(k, p, r, avg_fscore))
         for i in range(6):
             print('String {} accuracy: {:3f}'.format(i+1, correct[i] / total))
+
         if avg_fscore > best_fscore:
             best_fscore = avg_fscore
-            torch.save(model.state_dict(), os.path.join(os.path.join(args.save_model_path, args.log_name), 'best_cnn.pth'))
-
-        
+            torch.save(model.state_dict(), os.path.join(os.path.join(args.save_model_path, args.log_name), 'best_lstm.pth'))
 
     finish_time = time()
     print("Total Time Consumption:", (finish_time - start_time)/60, "min")
