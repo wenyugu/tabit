@@ -1,8 +1,5 @@
 # tabit
 
-## Notes
-Use <https://github.com/andywiggins/tab-cnn> as starter code. This project contains common audio preprocessing pipelines and some evaluation metrics but it is written in Keras. 
-
 ## Dataset
 <https://github.com/marl/GuitarSet>
 
